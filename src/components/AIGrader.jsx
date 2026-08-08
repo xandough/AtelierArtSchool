@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
-import { Upload, X, Star, CheckCircle, AlertCircle, Loader2, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Upload, X, Star, CheckCircle, AlertCircle, ExternalLink, Loader2, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 import { gradeArtwork, getProgressFeedback, fileToBase64, getLetterGradeColor } from '../services/aiGrading';
 import { useApp } from '../context/AppContext';
 
@@ -155,9 +156,21 @@ export default function AIGrader({ assignment, teacher, courseId, isFinalProject
           </div>
 
           {error && (
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', padding: '12px 16px', background: 'var(--color-danger-dim)', border: '1px solid rgba(196,74,58,0.3)', borderRadius: '10px', marginTop: '16px' }}>
-              <AlertCircle size={16} style={{ color: '#e06a5a', flexShrink: 0, marginTop: '2px' }} />
-              <p style={{ color: '#e06a5a', fontSize: '0.875rem' }}>{error}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px 16px', background: 'var(--color-danger-dim)', border: '1px solid rgba(196,74,58,0.3)', borderRadius: '10px', marginTop: '16px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                <AlertCircle size={16} style={{ color: '#e06a5a', flexShrink: 0, marginTop: '2px' }} />
+                <p style={{ color: '#e06a5a', fontSize: '0.875rem', lineHeight: 1.5 }}>{error}</p>
+              </div>
+              {/key|credentials|auth/i.test(error) && (
+                <div style={{ display: 'flex', gap: '16px', marginTop: '4px', paddingTop: '8px', borderTop: '1px solid rgba(196,74,58,0.2)' }}>
+                  <Link to="/settings" style={{ fontSize: '0.8rem', color: 'var(--color-gold)', fontWeight: '600', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    Open Settings →
+                  </Link>
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    Get Free Gemini API Key <ExternalLink size={12} />
+                  </a>
+                </div>
+              )}
             </div>
           )}
 

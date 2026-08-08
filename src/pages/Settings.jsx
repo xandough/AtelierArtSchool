@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Eye, EyeOff, Key, Trash2, ExternalLink, CheckCircle, AlertCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { cleanApiKey } from '../services/aiGrading';
 
 export default function Settings() {
   const { state, dispatch } = useApp();
@@ -10,7 +11,9 @@ export default function Settings() {
   const [confirmReset, setConfirmReset] = useState(false);
 
   const handleSaveKey = () => {
-    dispatch({ type: 'UPDATE_API_KEY', payload: apiKey.trim() });
+    const cleaned = cleanApiKey(apiKey);
+    dispatch({ type: 'UPDATE_API_KEY', payload: cleaned });
+    setApiKey(cleaned);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };

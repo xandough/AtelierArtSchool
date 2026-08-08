@@ -2,7 +2,86 @@
 // AI Grading Service — Powered by Google Gemini API
 // ============================================================
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-latest',
+  'gemini-2.5-pro',
+  'gemini-1.5-pro',
+];
+
+/**
+ * Clean and sanitize API key string (strips quotes, whitespace, Bearer prefix)
+ */
+export function cleanApiKey(key) {
+  if (!key) return '';
+  let cleaned = String(key).trim().replace(/^["']|["']$/g, '');
+  if (/^bearer\s+/i.test(cleaned)) {
+    cleaned = cleaned.replace(/^bearer\s+/i, '').trim();
+  }
+  return cleaned;
+}
+
+/**
+ * Execute Gemini API request with sanitized key, model fallback, and clear error handling
+ */
+async function callGeminiApi(apiKey, payload) {
+  const cleanKey = cleanApiKey(apiKey);
+  if (!cleanKey) {
+    throw new Error('No Gemini API key configured. Please add your API key in Settings → AI Grading.');
+  }
+
+  const isOAuthToken = cleanKey.startsWith('ya29.') || cleanKey.startsWith('y29.');
+  let lastError = null;
+
+  for (const model of GEMINI_MODELS) {
+    const headers = { 'Content-Type': 'application/json' };
+    let url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+    if (isOAuthToken) {
+      headers['Authorization'] = `Bearer ${cleanKey}`;
+    } else {
+      headers['x-goog-api-key'] = cleanKey;
+      url += `?key=${encodeURIComponent(cleanKey)}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    if (response.ok) {
+      return response.json();
+    }
+
+    const errorJson = await response.json().catch(() => ({}));
+    const rawMsg = errorJson?.error?.message || '';
+    const status = response.status;
+
+    if (status === 404 || rawMsg.toLowerCase().includes('not found') || rawMsg.toLowerCase().includes('not supported')) {
+      lastError = new Error(rawMsg || `Model ${model} not available`);
+      continue; // Try next model candidate
+    }
+
+    if (status === 401 || rawMsg.toLowerCase().includes('authentication credentials') || rawMsg.toLowerCase().includes('oauth')) {
+      throw new Error('Invalid authentication credentials. Please check your Gemini API key in Settings (get a free key at https://aistudio.google.com/app/apikey).');
+    }
+    if (status === 400 && rawMsg.toLowerCase().includes('api key')) {
+      throw new Error('Your Gemini API key is not valid. Please verify your API key in Settings.');
+    }
+    if (status === 403) {
+      throw new Error('API Key access denied. Please ensure the Generative Language API is enabled for your API key.');
+    }
+    if (status === 429) {
+      throw new Error('Gemini API rate limit reached. Please wait a moment and try submitting again.');
+    }
+    throw new Error(rawMsg || `Gemini API error: ${status}`);
+  }
+
+  throw lastError || new Error('No compatible Gemini model found for your API key.');
+}
 
 /**
  * Grade an artwork submission using Gemini AI
@@ -17,10 +96,6 @@ const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/
  * @returns {Promise<{score: number, letterGrade: string, feedback: Object}>}
  */
 export async function gradeArtwork({ apiKey, imageBase64, imageMimeType, assignment, teacher, studentName, isFinalProject = false }) {
-  if (!apiKey) {
-    throw new Error('No Gemini API key configured. Please add your API key in Settings.');
-  }
-
   const rubricText = assignment.rubric
     .map(r => `- ${r.criterion} (${r.weight}% of grade)`)
     .join('\n');
@@ -81,19 +156,7 @@ Respond ONLY with a valid JSON object in this exact structure:
     },
   };
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    const message = error?.error?.message || `API error: ${response.status}`;
-    throw new Error(message);
-  }
-
-  const data = await response.json();
+  const data = await callGeminiApi(apiKey, requestBody);
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
   if (!text) {
@@ -117,8 +180,6 @@ Respond ONLY with a valid JSON object in this exact structure:
  * Get general feedback on a work-in-progress without formal grading
  */
 export async function getProgressFeedback({ apiKey, imageBase64, imageMimeType, teacher, context }) {
-  if (!apiKey) throw new Error('No API key configured.');
-
   const prompt = `You are ${teacher.name}, an art instructor. A student has shared a work-in-progress and is asking for quick, informal feedback. Context: ${context}
 
 Look at the image and provide brief, encouraging feedback in 2–3 short paragraphs. Be specific about what you see. End with one concrete suggestion for what to work on next.
@@ -135,14 +196,7 @@ Keep your response conversational and warm — this is an informal check-in, not
     generationConfig: { temperature: 0.8, maxOutputTokens: 512 },
   };
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!response.ok) throw new Error('Failed to get feedback');
-  const data = await response.json();
+  const data = await callGeminiApi(apiKey, requestBody);
   return data?.candidates?.[0]?.content?.parts?.[0]?.text || 'Unable to get feedback at this time.';
 }
 

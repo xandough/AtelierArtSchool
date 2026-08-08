@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useApp } from "../context/AppContext";
+import { cleanApiKey } from "../services/aiGrading";
 import { Palette, ArrowRight, Eye, EyeOff, ExternalLink } from "lucide-react";
 
 export default function Onboarding() {
@@ -12,7 +13,7 @@ export default function Onboarding() {
   const handleComplete = () => {
     dispatch({
       type: "COMPLETE_ONBOARDING",
-      payload: { name: name.trim(), apiKey: apiKey.trim() },
+      payload: { name: name.trim(), apiKey: cleanApiKey(apiKey) },
     });
   };
 

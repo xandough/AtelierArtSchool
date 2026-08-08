@@ -8,6 +8,7 @@ import CurriculumMap from '../pages/CurriculumMap';
 import Classroom from '../pages/Classroom';
 import Profile from '../pages/Profile';
 import Settings from '../pages/Settings';
+import { cleanApiKey } from '../services/aiGrading';
 
 // Helper to seed localStorage
 function setupInitialState(overrides = {}) {
@@ -158,5 +159,12 @@ describe('The Atelier App - Page and Route Integration Tests', () => {
     fireEvent.click(saveBtn);
 
     expect(screen.getByText(/API key configured — AI grading is active/i)).toBeInTheDocument();
+  });
+
+  it('correctly cleans API keys with Bearer prefix, whitespace, or quotes', () => {
+    expect(cleanApiKey(' Bearer AIzaSy12345 ')).toBe('AIzaSy12345');
+    expect(cleanApiKey('"AIzaSy12345"')).toBe('AIzaSy12345');
+    expect(cleanApiKey('\'AIzaSy12345\'')).toBe('AIzaSy12345');
+    expect(cleanApiKey('ya29.OAuthToken')).toBe('ya29.OAuthToken');
   });
 });
