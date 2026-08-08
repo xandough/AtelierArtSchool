@@ -1,13 +1,9 @@
-// ============================================================
-// AI Grading Service — Powered by Google Gemini API
-// ============================================================
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
+// Standard official Gemini models for AI Studio
 const GEMINI_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
   'gemini-1.5-flash',
-  'gemini-1.5-flash-latest',
-  'gemini-2.5-pro',
+  'gemini-2.0-flash',
   'gemini-1.5-pro',
 ];
 
@@ -24,63 +20,62 @@ export function cleanApiKey(key) {
 }
 
 /**
- * Execute Gemini API request with sanitized key, model fallback, and clear error handling
+ * Execute Gemini API request using @google/generative-ai SDK with high-version models
  */
-async function callGeminiApi(apiKey, payload) {
+async function callGeminiApi(apiKey, contents, generationConfig = {}) {
   const cleanKey = cleanApiKey(apiKey);
   if (!cleanKey) {
     throw new Error('No Gemini API key configured. Please add your API key in Settings → AI Grading.');
   }
 
-  const isOAuthToken = cleanKey.startsWith('ya29.') || cleanKey.startsWith('y29.');
+  const genAI = new GoogleGenerativeAI(cleanKey);
   let lastError = null;
 
-  for (const model of GEMINI_MODELS) {
-    const headers = { 'Content-Type': 'application/json' };
-    let url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  for (const modelName of GEMINI_MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig,
+      });
 
-    if (isOAuthToken) {
-      headers['Authorization'] = `Bearer ${cleanKey}`;
-    } else {
-      headers['x-goog-api-key'] = cleanKey;
-      url += `?key=${encodeURIComponent(cleanKey)}`;
-    }
+      const result = await model.generateContent(contents);
+      const response = await result.response;
+      const text = response.text();
+      if (text) return text;
+    } catch (err) {
+      const msg = err.message || '';
+      const lower = msg.toLowerCase();
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-    });
+      // If the API key itself is invalid or unauthenticated, throw immediately instead of looping
+      if (
+        lower.includes('api_key_invalid') ||
+        lower.includes('api key not valid') ||
+        lower.includes('invalid authentication') ||
+        lower.includes('unauthenticated') ||
+        lower.includes('401')
+      ) {
+        throw new Error('Invalid Gemini API key. Please verify your API key in Settings (get a free key at https://aistudio.google.com/app/apikey).');
+      }
 
-    if (response.ok) {
-      return response.json();
-    }
+      if (lower.includes('403') || lower.includes('permission_denied')) {
+        throw new Error('API Key access denied. Please ensure the Generative Language API is enabled for your key in Google Cloud/AI Studio.');
+      }
 
-    const errorJson = await response.json().catch(() => ({}));
-    const rawMsg = errorJson?.error?.message || '';
-    const status = response.status;
+      if (lower.includes('429') || lower.includes('quota') || lower.includes('rate limit')) {
+        throw new Error('Gemini API rate limit reached. Please wait a moment and try submitting again.');
+      }
 
-    if (status === 404 || rawMsg.toLowerCase().includes('not found') || rawMsg.toLowerCase().includes('not supported')) {
-      lastError = new Error(rawMsg || `Model ${model} not available`);
-      continue; // Try next model candidate
-    }
+      // If specific model is not found in region/tier, log and try next high-version model
+      if (lower.includes('not found') || lower.includes('not supported') || lower.includes('404')) {
+        lastError = err;
+        continue;
+      }
 
-    if (status === 401 || rawMsg.toLowerCase().includes('authentication credentials') || rawMsg.toLowerCase().includes('oauth')) {
-      throw new Error('Invalid authentication credentials. Please check your Gemini API key in Settings (get a free key at https://aistudio.google.com/app/apikey).');
+      throw err;
     }
-    if (status === 400 && rawMsg.toLowerCase().includes('api key')) {
-      throw new Error('Your Gemini API key is not valid. Please verify your API key in Settings.');
-    }
-    if (status === 403) {
-      throw new Error('API Key access denied. Please ensure the Generative Language API is enabled for your API key.');
-    }
-    if (status === 429) {
-      throw new Error('Gemini API rate limit reached. Please wait a moment and try submitting again.');
-    }
-    throw new Error(rawMsg || `Gemini API error: ${status}`);
   }
 
-  throw lastError || new Error('No compatible Gemini model found for your API key.');
+  throw lastError || new Error('Unable to connect to Gemini API. Please check your API key in Settings.');
 }
 
 /**
@@ -134,30 +129,20 @@ Respond ONLY with a valid JSON object in this exact structure:
   "nextStepAdvice": "<one clear, concrete thing they should focus on in their next practice session>"
 }`;
 
-  const requestBody = {
-    contents: [
-      {
-        parts: [
-          {
-            text: systemPrompt,
-          },
-          ...(imageBase64 ? [{
-            inline_data: {
-              mime_type: imageMimeType || 'image/jpeg',
-              data: imageBase64,
-            },
-          }] : []),
-        ],
+  const contents = [
+    systemPrompt,
+    ...(imageBase64 ? [{
+      inlineData: {
+        mimeType: imageMimeType || 'image/jpeg',
+        data: imageBase64,
       },
-    ],
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 2048,
-    },
-  };
+    }] : []),
+  ];
 
-  const data = await callGeminiApi(apiKey, requestBody);
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  const text = await callGeminiApi(apiKey, contents, {
+    temperature: 0.7,
+    maxOutputTokens: 2048,
+  });
 
   if (!text) {
     throw new Error('No response received from Gemini API');
@@ -186,18 +171,12 @@ Look at the image and provide brief, encouraging feedback in 2–3 short paragra
 
 Keep your response conversational and warm — this is an informal check-in, not a formal grade.`;
 
-  const requestBody = {
-    contents: [{
-      parts: [
-        { text: prompt },
-        ...(imageBase64 ? [{ inline_data: { mime_type: imageMimeType || 'image/jpeg', data: imageBase64 } }] : []),
-      ],
-    }],
-    generationConfig: { temperature: 0.8, maxOutputTokens: 512 },
-  };
+  const contents = [
+    prompt,
+    ...(imageBase64 ? [{ inlineData: { mimeType: imageMimeType || 'image/jpeg', data: imageBase64 } }] : []),
+  ];
 
-  const data = await callGeminiApi(apiKey, requestBody);
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text || 'Unable to get feedback at this time.';
+  return await callGeminiApi(apiKey, contents, { temperature: 0.8, maxOutputTokens: 512 });
 }
 
 /**
