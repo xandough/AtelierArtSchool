@@ -22,8 +22,8 @@ function AppShell() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/curriculum" element={<CurriculumMap />} />
-          <Route path="/classroom/m:monthId" element={<Classroom />} />
-          <Route path="/classroom/m:monthId/:courseId" element={<Classroom />} />
+          <Route path="/classroom/:monthId" element={<Classroom />} />
+          <Route path="/classroom/:monthId/:courseId" element={<Classroom />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />

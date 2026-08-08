@@ -31,8 +31,8 @@ export default function Classroom() {
     getFinalProjectScore, getEnrollmentDate,
   } = useApp();
 
-  // monthId from route /classroom/m:monthId is just the digit(s) e.g. "1", "12"
-  const monthNum = parseInt(monthId, 10);
+  // monthId from route /classroom/:monthId could be "m1" or "1"
+  const monthNum = parseInt(String(monthId || '').replace(/^m/i, ''), 10);
   const monthData = CURRICULUM.find(m => m.month === monthNum);
 
   let course, otherCourse;
