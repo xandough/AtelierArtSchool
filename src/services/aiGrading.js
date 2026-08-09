@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const GEMINI_MODELS = [
   'gemini-1.5-flash',
   'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
   'gemini-1.5-pro',
 ];
 
@@ -73,6 +74,10 @@ async function callGeminiApi(apiKey, contents, generationConfig = {}) {
 
       throw err;
     }
+  }
+
+  if (lastError && lastError.message.toLowerCase().includes('not found')) {
+    throw new Error('Your API key is valid, but none of the standard Gemini models (like gemini-1.5-flash) are available for your key or region. Please ensure you are using a standard Google AI Studio key (https://aistudio.google.com/app/apikey).');
   }
 
   throw lastError || new Error('Unable to connect to Gemini API. Please check your API key in Settings.');
